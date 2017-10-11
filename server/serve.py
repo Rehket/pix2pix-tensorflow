@@ -12,7 +12,7 @@ import traceback
 import threading
 import multiprocessing
 import random
-
+import sys
 
 # https://github.com/Nakiami/MultithreadedSimpleHTTPServer/blob/master/MultithreadedSimpleHTTPServer.py
 try:
@@ -147,7 +147,7 @@ class Handler(BaseHTTPRequestHandler):
 
         try:
             name = self.path[1:]
-
+            print(name)
             if name not in models:
                 raise Exception("invalid model")
 
@@ -235,8 +235,14 @@ def main():
                 saver = tf.train.import_meta_graph(os.path.join(a.local_models_dir, name, "export.meta"))
 
                 saver.restore(sess, os.path.join(a.local_models_dir, name, "export"))
-                input_vars = json.loads(tf.get_collection("inputs")[0])
-                output_vars = json.loads(tf.get_collection("outputs")[0])
+
+                if sys.version_info.major == 3:
+                    input_vars = json.loads(tf.get_collection("inputs")[0].decode("utf-8"))
+                    output_vars = json.loads(tf.get_collection("outputs")[0].decode("utf-8"))
+                else:
+                    input_vars = json.loads(tf.get_collection("inputs")[0])
+                    output_vars = json.loads(tf.get_collection("outputs")[0])
+
                 input = graph.get_tensor_by_name(input_vars["input"])
                 output = graph.get_tensor_by_name(output_vars["output"])
 
