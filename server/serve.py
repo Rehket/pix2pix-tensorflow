@@ -88,7 +88,7 @@ def getModels(inputDir):
     my_models = os.listdir(inputDir)
     index = 0
     for model in my_models:
-        model_key_vals.append((index, model))
+        model_key_vals.append((model.replace("_", " "), model))
         index += 1
     return_dict = dict(model_key_vals)
     return_dict = [return_dict]
