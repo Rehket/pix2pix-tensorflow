@@ -4,6 +4,9 @@
 <div>cuhk_faces</div>
 <div id="cuhk_faces"></div>
 
+<p>Forked from <a href="https://github.com/affinelayer/pix2pix-tensorflow">Affinelayer Pix2Pix</a></p>
+<p>Please note that this is an unstable development branch and there may be changes that get pushed out while you are
+    using the service. Please make sure to save any pieces you are working on frequently.</p>
 
 <script>
 
@@ -16,6 +19,8 @@ var editors = []
 var request_in_progress = false
 var last_request_failed = false
 var base_url = ""  // this will cause it to talk to the server of this file
+
+
 
 function main() {
   var create_editor = function(config) {
@@ -227,6 +232,8 @@ render: function() {
       })
     })
 
+
+
     v.frame("process_button", 461 - 32, 148, 32*2, 40, () => {
       if (request_in_progress) {
         do_button(v, "...")
@@ -240,21 +247,31 @@ render: function() {
           last_request_failed = false
           var convert = createContext(SIZE, SIZE, 1)
           convert.drawImage(this.buffer.canvas, 0, 0, convert.canvas.width, convert.canvas.height)
-          var input_b64 = convert.canvas.toDataURL("image/png").replace(/^data:image\/png;base64,/, "")
-          var xhr = new XMLHttpRequest()
-          xhr.open("POST", this.config.generate_url, true)
-          xhr.setRequestHeader("Content-Type", "image/png")
-          xhr.responseType = "arraybuffer"
-          xhr.timeout = 45000
 
-          xhr.onreadystatechange = () => {
-          	if (xhr.readyState == 4) {
+            console.log('Data Url:\n' + input)
+            //Removes the prefix, mediatype, and base64 tag.
+            var input_b64 = input.replace(/^data:image\/png;base64,/, "")
+
+            console.log(input_b64)
+
+            console.log('bin64 to bin:\n' + b64_to_bin(input_b64))
+
+          var xmlRequest = new XMLHttpRequest()
+          xmlRequest.open("POST", this.config.generate_url, true)
+          xmlRequest.setRequestHeader("Content-Type", "image/png")
+          xmlRequest.responseType = "arraybuffer"
+          xmlRequest.timeout = 45000
+
+        // This is a callback that gets called when the data is received.
+          xmlRequest.onreadystatechange = () => {
+          	if (xmlRequest.readyState == 4) {
               request_in_progress = false
               update()
-              if (xhr.status == 200) {
-                var output_bin = new Uint8Array(xhr.response)
+              if (xmlRequest.status == 200) {
+                var output_bin = new Uint8Array(xmlRequest.response)
                 var output_b64 = bin_to_b64(output_bin)
                 var output = new Image()
+                  console.log("data:image\/png;base64," + output_b64)
                 output.src = "data:image\/png;base64," + output_b64
                 output.onload = () => {
                   // browsers besides chrome need to wait for the image to load
@@ -268,7 +285,7 @@ render: function() {
           }
           request_in_progress = true
           update()
-          xhr.send(b64_to_bin(input_b64))
+          xmlRequest.send(b64_to_bin(input_b64))
         }
       }
     })
@@ -341,6 +358,28 @@ render: function() {
 
 // utility
 
+function loadImageToCanvas(e) {
+    var reader = new FileReader();
+    var myCanvas = document.getElementById('InputCanvas');
+    var myContext = myCanvas.getContext('2d');
+    console.log('Event Fired');
+    console.log(e);
+    reader.onload = function(e) { // Step 2, the File Reader loads
+        console.log('Reader Loaded');
+        var img = new Image();
+        img.onload = function () {   // Step 4, the reader loads.
+            console.log('Image Loaded');
+            myContext.drawImage(img, 0, 0);
+            packageImage(myCanvas);
+        };
+        // console.log(e.target.result);
+        img.src = e.target.result;  // Step 3
+    };
+
+    reader.readAsDataURL(e.target.files[0]); // Step 1, reader reads the file(s) we selected.
+
+}
+
 function createContext(width, height, scale) {
   var canvas = document.createElement("canvas")
   canvas.width = width * scale
@@ -355,17 +394,20 @@ function createContext(width, height, scale) {
   return ctx
 }
 
+// m
 function b64_to_bin(str) {
   var binstr = atob(str)
   var bin = new Uint8Array(binstr.length)
   for (var i = 0; i < binstr.length; i++) {
-    bin[i] = binstr.charCodeAt(i)
+      bin[i] = binstr.charCodeAt(i)
   }
   return bin
 }
 
+//
 function bin_to_b64(bin) {
   var parts = []
+
   for (var i = 0; i < bin.length; i++) {
     parts.push(String.fromCharCode(bin[i]))
   }
@@ -459,14 +501,14 @@ function do_button(v, text) {
   }
 
   if (request_in_progress) {
-    animate(name, parse_color("#aaaaaaFF"), 100)
+    animate(name, parse_color("#ff911e"), 100)
   } else if (mouse_down && v.contains(mouse_pos)) {
-    animate(name, parse_color("#FF0000FF"), 50)
+    animate(name, parse_color("#ff11ca"), 50)
   } else {
     if (v.contains(mouse_pos)) {
-      animate(name, parse_color("#f477a5FF"), 100)
+      animate(name, parse_color("#3e43dc"), 100)
     } else {
-      animate(name, parse_color("#f92672FF"), 100)
+      animate(name, parse_color("#09ff09"), 100)
     }
   }
 
@@ -487,7 +529,7 @@ function do_button(v, text) {
   v.ctx.restore()
 
   v.ctx.font = "16px Arial"
-  v.ctx.fillStyle = "#f8f8f8"
+  v.ctx.fillStyle = "#ffffff"
   v.center_text(text)
 
   if (request_in_progress) {

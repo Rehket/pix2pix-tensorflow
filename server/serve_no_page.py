@@ -5,7 +5,6 @@ from __future__ import print_function
 import socket
 import time
 import argparse
-import base64
 import os
 import json
 import traceback
@@ -13,17 +12,17 @@ import threading
 import multiprocessing
 import random
 import sys
+import base64
 
 # https://github.com/Nakiami/MultithreadedSimpleHTTPServer/blob/master/MultithreadedSimpleHTTPServer.py
-if sys.version_info.major == 3:
-    # Python 3
-    from socketserver import ThreadingMixIn
-    from http.server import HTTPServer, BaseHTTPRequestHandler
-else:
+try:
     # Python 2
     from SocketServer import ThreadingMixIn
     from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
-
+except ImportError:
+    # Python 3
+    from socketserver import ThreadingMixIn
+    from http.server import HTTPServer, BaseHTTPRequestHandler
 
 socket.setdefaulttimeout(30)
 
@@ -34,8 +33,7 @@ parser.add_argument("--origin", help="allowed origin")
 parser.add_argument("--addr", default="", help="address to listen on")
 parser.add_argument("--port", default=8000, type=int, help="port to listen on")
 parser.add_argument("--wait", default=0, type=int, help="time to wait for each request")
-parser.add_argument("--credentials", help="JSON credentials for a Google Cloud Platform service account, generate this at https://console.cloud.google.com/iam-admin/serviceaccounts/project (select \"Furnish a new private key\")")
-parser.add_argument("--project", help="Google Cloud Project to use, only necessary if using default application credentials")
+
 a = parser.parse_args()
 
 jobs = threading.Semaphore(multiprocessing.cpu_count() * 4)
@@ -82,23 +80,6 @@ failures = RateCounter(1 * 60 * 1e6)
 cloud_requests = RateCounter(5 * 60 * 1e6)
 cloud_accepts = RateCounter(5 * 60 * 1e6)
 
-# Get the models as a json string.
-def getModels(inputDir):
-    model_key_vals = []
-    my_models = os.listdir(inputDir)
-    index = 0
-    for model in my_models:
-        model_key_vals.append((index, model))
-        index += 1
-    return_dict = dict(model_key_vals)
-    return_dict = [return_dict]
-    model_json = json.JSONEncoder().encode(return_dict)
-
-    return model_json
-
-# Get Status
-def get_Status():
-    return
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -106,14 +87,6 @@ class Handler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.end_headers()
             self.wfile.write("OK")
-            return
-
-        if self.path == "/models":
-            self.send_response(200)
-            self.send_header("Content-type", "text/json")
-            self.end_headers()
-            self.wfile.write(getModels(a.local_models_dir).encode("utf-8"))
-
             return
 
         if not os.path.exists("static"):
@@ -153,10 +126,9 @@ class Handler(BaseHTTPRequestHandler):
                 print("invalid origin %s" % self.headers["origin"])
                 self.send_response(400)
                 return
-            self.send_header("access-control-allow-origin", "*")
+            self.send_header("access-control-allow-origin", self.headers["origin"])
 
         allow_headers = self.headers.get("access-control-request-headers", "*")
-        self.send_header("access-control-allow-headers", allow_headers)
         self.send_header("access-control-allow-headers", allow_headers)
         self.send_header("access-control-allow-methods", "POST, OPTIONS")
         self.send_header("access-control-max-age", "3600")
@@ -173,12 +145,15 @@ class Handler(BaseHTTPRequestHandler):
         body = ""
 
         try:
-            name = self.path[1:]
-            print(name)
+            url = self.path.strip("\n").split("/")
+            print(url[1])
+            name = url[1]
             if name not in models:
                 raise Exception("invalid model")
 
             variants = models[name]  # "cloud" and "local" are the two possible variants
+
+
 
             content_len = int(self.headers.get("content-length", "0"))
             if content_len > 1 * 1024 * 1024:
@@ -186,32 +161,9 @@ class Handler(BaseHTTPRequestHandler):
             input_data = self.rfile.read(content_len)
             input_b64data = base64.urlsafe_b64encode(input_data)
 
-            # print(input_b64data)
-           #  my_input_file = open("input.txt", "wb")
-
-            # my_input_file.write(input_b64data)
-
-            # my_input_file.close()
             time.sleep(a.wait)
 
-            cloud_reject_prob = max(0, (cloud_requests.value() - 1.1 * cloud_accepts.value()) / (cloud_requests.value() + 1))
-            # print("requests=%d accepts=%d cloud_reject_prob=%f" % (cloud_requests.value(), cloud_accepts.value(), cloud_reject_prob))
-
             output_b64data = None
-            if "cloud" in variants and random.random() > cloud_reject_prob:
-                input_instance = dict(input=input_b64data, key="0")
-                # the client does not seem to be threadsafe, so make one for each request
-                # also the cache is broken by oauth2client 4.0.0, so use a memory cache
-                request = build_cloud_client().projects().predict(name="projects/" + project_id + "/models/" + name, body={"instances": [input_instance]})
-                try:
-                    cloud_requests.incr()
-                    response = request.execute()
-                    output_instance = response["predictions"][0]
-                    output_b64data = output_instance["output"].encode("ascii")
-                    cloud_accepts.incr()
-                except Exception as e:
-                    print("exception while running cloud model", traceback.format_exc())
-                    print("falling back to local")
 
             if output_b64data is None and "local" in variants and jobs.acquire(blocking=False):
                 m = variants["local"]
@@ -223,19 +175,9 @@ class Handler(BaseHTTPRequestHandler):
             if output_b64data is None:
                 raise Exception("too many requests")
 
-            # my_file = open("Pre_padding.txt", "wb")
-            # my_file.write(output_b64data)
             # add any missing padding
             output_b64data += b"=" * (-len(output_b64data) % 4)
-            # print(output_b64data)
-            # my_file_2 = open("Post_padding.txt", "w")
-            # my_file_2.write(output_b64data.decode("ascii"))
             output_data = base64.urlsafe_b64decode(output_b64data)
-            # print(output_data)
-
-            # my_file.close()
-            # my_file_2.close()
-
             if output_data.startswith(b"\x89PNG"):
                 headers["content-type"] = "image/png"
             else:

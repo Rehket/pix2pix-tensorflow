@@ -13,6 +13,8 @@ import collections
 import math
 import time
 
+
+
 parser = argparse.ArgumentParser()
 parser.add_argument("--input_dir", help="path to folder containing images")
 parser.add_argument("--mode", required=True, choices=["train", "test", "export"])
@@ -25,7 +27,7 @@ parser.add_argument("--max_epochs", type=int, help="number of training epochs")
 parser.add_argument("--summary_freq", type=int, default=100, help="update summaries every summary_freq steps")
 parser.add_argument("--progress_freq", type=int, default=50, help="display progress every progress_freq steps")
 parser.add_argument("--trace_freq", type=int, default=0, help="trace execution every trace_freq steps")
-parser.add_argument("--display_freq", type=int, default=0, help="write current training images every display_freq steps")
+parser.add_argument("--display_freq", type=int, default=100, help="write current training images every display_freq steps")
 parser.add_argument("--save_freq", type=int, default=5000, help="save model every save_freq steps, 0 to disable")
 
 parser.add_argument("--aspect_ratio", type=float, default=1.0, help="aspect ratio of output images (width/height)")
@@ -39,6 +41,9 @@ parser.add_argument("--flip", dest="flip", action="store_true", help="flip image
 parser.add_argument("--no_flip", dest="flip", action="store_false", help="don't flip images horizontally")
 parser.set_defaults(flip=True)
 parser.add_argument("--lr", type=float, default=0.0002, help="initial learning rate for adam")
+parser.add_argument("--dis_rate_reducer", type=float, default=1.0,
+                    help="What factor of the training rate should the discriminator have?")
+# The Beta term is the decay rate for the training value.
 parser.add_argument("--beta1", type=float, default=0.5, help="momentum term of adam")
 parser.add_argument("--l1_weight", type=float, default=100.0, help="weight on L1 term for generator gradient")
 parser.add_argument("--gan_weight", type=float, default=1.0, help="weight on GAN term for generator gradient")
@@ -89,19 +94,56 @@ def augment(image, brightness):
     rgb = lab_to_rgb(lab)
     return rgb
 
-
+# Stride is how far each convolution layer steps.
 def conv(batch_input, out_channels, stride):
     with tf.variable_scope("conv"):
         in_channels = batch_input.get_shape()[3]
+        # https://www.tensorflow.org/api_docs/python/tf/get_variable
+        # filter is the name of the new tf variable.
+        # get_variable(
+        #     name,
+        #     shape=None,
+        #     dtype=None,
+        #     initializer=None,
+        #     regularizer=None,
+        #     trainable=True,
+        #     collections=None,
+        #     caching_device=None,
+        #     partitioner=None,
+        #     validate_shape=True,
+        #     use_resource=None,
+        #     custom_getter=None
+        # )
         filter = tf.get_variable("filter", [4, 4, in_channels, out_channels], dtype=tf.float32, initializer=tf.random_normal_initializer(0, 0.02))
         # [batch, in_height, in_width, in_channels], [filter_width, filter_height, in_channels, out_channels]
         #     => [batch, out_height, out_width, out_channels]
+
+
+        # pad(
+        #     tensor,
+        #     paddings,
+        #     mode='CONSTANT',
+        #     name=None,
+        #     constant_values=0
+        # )
+
         padded_input = tf.pad(batch_input, [[0, 0], [1, 1], [1, 1], [0, 0]], mode="CONSTANT")
+
+        # conv2d(
+        #     input,
+        #     filter,
+        #     strides,
+        #     padding,
+        #     use_cudnn_on_gpu=None,
+        #     data_format=None,
+        #     name=None
+        # )
         conv = tf.nn.conv2d(padded_input, filter, [1, stride, stride, 1], padding="VALID")
         return conv
 
 
 def lrelu(x, a):
+    # Pretty much defines a namespace for the variables.
     with tf.name_scope("lrelu"):
         # adding these together creates the leak part and linear part
         # then cancels them out by subtracting/adding an absolute value term
@@ -121,6 +163,8 @@ def batchnorm(input):
         channels = input.get_shape()[3]
         offset = tf.get_variable("offset", [channels], dtype=tf.float32, initializer=tf.zeros_initializer())
         scale = tf.get_variable("scale", [channels], dtype=tf.float32, initializer=tf.random_normal_initializer(1.0, 0.02))
+
+                        # Calculate the mean and variance of input
         mean, variance = tf.nn.moments(input, axes=[0, 1, 2], keep_dims=False)
         variance_epsilon = 1e-5
         normalized = tf.nn.batch_normalization(input, mean, variance, offset, scale, variance_epsilon=variance_epsilon)
@@ -397,6 +441,8 @@ def create_generator(generator_inputs, generator_outputs_channels):
 
 
 def create_model(inputs, targets):
+
+    # Build a classifier
     def create_discriminator(discrim_inputs, discrim_targets):
         n_layers = 3
         layers = []
@@ -435,7 +481,7 @@ def create_model(inputs, targets):
         outputs = create_generator(inputs, out_channels)
 
     # create two copies of discriminator, one for real pairs and one for fake pairs
-    # they share the same underlying variables
+    # they share the same underlying variables, hence the reuse=True
     with tf.name_scope("real_discriminator"):
         with tf.variable_scope("discriminator"):
             # 2x [batch, height, width, channels] => [batch, 30, 30, 1]
@@ -583,7 +629,7 @@ def main():
         input_image = tf.image.decode_png(input_data)
 
         # remove alpha channel if present
-        input_image = tf.cond(tf.equal(tf.shape(input_image)[2], 4), lambda: input_image[:,:,:3], lambda: input_image)
+        input_image = tf.cond(tf.equal(tf.shape(input_image)[2], 4), lambda: input_image[:, :, :3], lambda: input_image)
         # convert grayscale to RGB
         input_image = tf.cond(tf.equal(tf.shape(input_image)[2], 1), lambda: tf.image.grayscale_to_rgb(input_image), lambda: input_image)
 
@@ -704,6 +750,9 @@ def main():
     tf.summary.scalar("generator_loss_GAN", model.gen_loss_GAN)
     tf.summary.scalar("generator_loss_L1", model.gen_loss_L1)
 
+    # merge all summaries into a single "operation" which we can execute in a session
+    summary_op = tf.summary.merge_all()
+
     for var in tf.trainable_variables():
         tf.summary.histogram(var.op.name + "/values", var)
 
@@ -716,10 +765,11 @@ def main():
     saver = tf.train.Saver(max_to_keep=1)
 
     logdir = a.output_dir if (a.trace_freq > 0 or a.summary_freq > 0) else None
-    sv = tf.train.Supervisor(logdir=logdir, save_summaries_secs=0, saver=None)
+    sv = tf.train.Supervisor(logdir=logdir, save_summaries_secs=60, saver=None)
     with sv.managed_session() as sess:
         print("parameter_count =", sess.run(parameter_count))
 
+        writer = tf.summary.FileWriter("C:\Workspace\pix2pix-tensorflow\Models\logs", sess.graph)
         if a.checkpoint is not None:
             print("loading model from checkpoint")
             checkpoint = tf.train.latest_checkpoint(a.checkpoint)
