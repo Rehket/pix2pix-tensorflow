@@ -16,12 +16,12 @@ This port is based directly on the torch implementation, and not on an existing 
 - Tensorflow 1.0.0, Works with Tensorflow 1.3
 
 ### Recommended
-- Linux with Tensorflow GPU edition + cuDNN
+- Tensorflow GPU edition + cuDNN
 
 ### Getting Started
 
 ```sh
-Install Python 3. The version used is Python 3.5.
+Install Python 3. The version I used is Python 3.5.
 
 If you are planning on using cuda with an nvidia GPU, :
 Install cuDNN 6, and Cuda 8 according to https://developer.nvidia.com/cuda-toolkit.
@@ -48,7 +48,7 @@ will start a webserver were users can submit images to be processed.
 
 TODO: Add the training instructions.
 
-```sh
+
 
 ## Unimplemented Features
 
@@ -61,12 +61,14 @@ The following models have not been implemented:
 If you use this code for your research, please cite the paper this code is based on: <a href="https://arxiv.org/pdf/1611.07004v1.pdf">Image-to-Image Translation Using Conditional Adversarial Networks</a>:
 
 ```
+
 @article{pix2pix2016,
   title={Image-to-Image Translation with Conditional Adversarial Networks},
   author={Isola, Phillip and Zhu, Jun-Yan and Zhou, Tinghui and Efros, Alexei A},
   journal={arxiv},
   year={2016}
 }
+
 ```
 
 ## Acknowledgments
