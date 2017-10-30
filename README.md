@@ -38,11 +38,11 @@ cd pix2pix-tensorflow
 
 Exported models can be placed in pix2pix-tensorflow/Models.
 
-Running:
+# Running:
 
 python serve.py --path/to/models 
 
-will start a webserver were users can submit images to be processed.
+# will start a webserver were users can submit images to be processed.
 
 ```
 
