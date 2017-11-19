@@ -11,7 +11,6 @@ import json
 import traceback
 import threading
 import multiprocessing
-import random
 import sys
 
 # https://github.com/Nakiami/MultithreadedSimpleHTTPServer/blob/master/MultithreadedSimpleHTTPServer.py
@@ -29,20 +28,18 @@ socket.setdefaulttimeout(30)
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--local_models_dir", help="directory containing local models to serve (either this or --cloud_model_names must be specified)")
-parser.add_argument("--cloud_model_names", help="comma separated list of cloud models to serve (either this or --local_models_dir must be specified)")
 parser.add_argument("--origin", help="allowed origin")
 parser.add_argument("--addr", default="", help="address to listen on")
 parser.add_argument("--port", default=8000, type=int, help="port to listen on")
 parser.add_argument("--wait", default=0, type=int, help="time to wait for each request")
-parser.add_argument("--credentials", help="JSON credentials for a Google Cloud Platform service account, generate this at https://console.cloud.google.com/iam-admin/serviceaccounts/project (select \"Furnish a new private key\")")
-parser.add_argument("--project", help="Google Cloud Project to use, only necessary if using default application credentials")
+
 a = parser.parse_args()
 
 jobs = threading.Semaphore(multiprocessing.cpu_count() * 4)
 models = {}
 ml = None
 project_id = None
-build_cloud_client = None
+
 
 
 class RateCounter(object):
@@ -82,6 +79,7 @@ failures = RateCounter(1 * 60 * 1e6)
 cloud_requests = RateCounter(5 * 60 * 1e6)
 cloud_accepts = RateCounter(5 * 60 * 1e6)
 
+
 # Get the models as a json string.
 def getModels(inputDir):
     model_key_vals = []
@@ -96,9 +94,11 @@ def getModels(inputDir):
 
     return model_json
 
+
 # Get Status
 def get_Status():
     return
+
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -120,13 +120,15 @@ class Handler(BaseHTTPRequestHandler):
             self.send_response(404)
             return
 
-        if self.path == "/":
+        '''
+                if self.path == "/":
             self.send_response(200)
             self.send_header("Content-Type", "text/html")
             self.end_headers()
             with open("static/index.html", "rb") as f:
                 self.wfile.write(f.read())
             return
+        '''
 
         filenames = [name for name in os.listdir("static") if not name.startswith(".")]
         path = self.path[1:]
@@ -145,7 +147,6 @@ class Handler(BaseHTTPRequestHandler):
         with open("static/" + path, "rb") as f:
             self.wfile.write(f.read())
 
-
     def do_OPTIONS(self):
         self.send_response(200)
         if "origin" in self.headers:
@@ -161,7 +162,6 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("access-control-allow-methods", "POST, OPTIONS")
         self.send_header("access-control-max-age", "3600")
         self.end_headers()
-
 
     def do_POST(self):
         start = time.time()
@@ -186,32 +186,7 @@ class Handler(BaseHTTPRequestHandler):
             input_data = self.rfile.read(content_len)
             input_b64data = base64.urlsafe_b64encode(input_data)
 
-            # print(input_b64data)
-           #  my_input_file = open("input.txt", "wb")
-
-            # my_input_file.write(input_b64data)
-
-            # my_input_file.close()
-            time.sleep(a.wait)
-
-            cloud_reject_prob = max(0, (cloud_requests.value() - 1.1 * cloud_accepts.value()) / (cloud_requests.value() + 1))
-            # print("requests=%d accepts=%d cloud_reject_prob=%f" % (cloud_requests.value(), cloud_accepts.value(), cloud_reject_prob))
-
             output_b64data = None
-            if "cloud" in variants and random.random() > cloud_reject_prob:
-                input_instance = dict(input=input_b64data, key="0")
-                # the client does not seem to be threadsafe, so make one for each request
-                # also the cache is broken by oauth2client 4.0.0, so use a memory cache
-                request = build_cloud_client().projects().predict(name="projects/" + project_id + "/models/" + name, body={"instances": [input_instance]})
-                try:
-                    cloud_requests.incr()
-                    response = request.execute()
-                    output_instance = response["predictions"][0]
-                    output_b64data = output_instance["output"].encode("ascii")
-                    cloud_accepts.incr()
-                except Exception as e:
-                    print("exception while running cloud model", traceback.format_exc())
-                    print("falling back to local")
 
             if output_b64data is None and "local" in variants and jobs.acquire(blocking=False):
                 m = variants["local"]
@@ -223,25 +198,15 @@ class Handler(BaseHTTPRequestHandler):
             if output_b64data is None:
                 raise Exception("too many requests")
 
-            # my_file = open("Pre_padding.txt", "wb")
-            # my_file.write(output_b64data)
-            # add any missing padding
             output_b64data += b"=" * (-len(output_b64data) % 4)
-            # print(output_b64data)
-            # my_file_2 = open("Post_padding.txt", "w")
-            # my_file_2.write(output_b64data.decode("ascii"))
+
             output_data = base64.urlsafe_b64decode(output_b64data)
-            # print(output_data)
 
-            # my_file.close()
-            # my_file_2.close()
+            headers["content-type"] = "image/png"
 
-            if output_data.startswith(b"\x89PNG"):
-                headers["content-type"] = "image/png"
-            else:
-                headers["content-type"] = "image/jpeg"
             body = output_data
             successes.incr()
+
         except Exception as e:
             failures.incr()
             print("exception", traceback.format_exc())
@@ -262,8 +227,8 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
 
 
 def main():
-    if a.local_models_dir is None and a.cloud_model_names is None:
-        raise Exception("must specify --local_models_dir or --cloud_model_names")
+    if a.local_models_dir is None:
+        raise Exception("must specify --local_models_dir")
 
     if a.local_models_dir is not None:
         import tensorflow as tf
@@ -298,50 +263,8 @@ def main():
                     output=output,
                 )
 
-    if a.cloud_model_names is not None:
-        import oauth2client.service_account
-        import googleapiclient.discovery
-        import googleapiclient.discovery_cache.base
-        import httplib2
-
-        for name in a.cloud_model_names.split(","):
-            if name not in models:
-                models[name] = {}
-            models[name]["cloud"] = None
-
-        scopes = ["https://www.googleapis.com/auth/cloud-platform"]
-        global project_id
-        if a.credentials is None:
-            credentials = oauth2client.client.GoogleCredentials.get_application_default()
-            # use this only to detect the project
-            import google.cloud.storage
-            storage = google.cloud.storage.Client()
-            project_id = storage.project
-            if a.project is not None:
-                project_id = a.project
-        else:
-            credentials = oauth2client.service_account.ServiceAccountCredentials.from_json_keyfile_name(a.credentials, scopes)
-            with open(a.credentials, "r") as f:
-                project_id = json.loads(f.read())["project_id"]
-
-        # due to what appears to be a bug, we cannot get the discovery document when specifying an http client
-        # so grab it first, then the second build should use the cache
-        class Cache(googleapiclient.discovery_cache.base.Cache):
-            def __init__(self):
-                self.cache = {}
-
-            def get(self, url):
-                return self.cache.get(url)
-
-            def set(self, url, content):
-                self.cache[url] = content
-
-        cache = Cache()
-        googleapiclient.discovery.build("ml", "v1beta1", credentials=credentials, cache=cache)
-        global build_cloud_client
-        build_cloud_client = lambda: googleapiclient.discovery.build("ml", "v1beta1", http=credentials.authorize(httplib2.Http(timeout=10)), cache=cache)
-
     print("listening on %s:%s" % (a.addr, a.port))
     ThreadedHTTPServer((a.addr, a.port), Handler).serve_forever()
+
 
 main()
