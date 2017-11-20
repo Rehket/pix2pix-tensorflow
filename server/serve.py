@@ -39,6 +39,7 @@ jobs = threading.Semaphore(multiprocessing.cpu_count() * 4)
 models = {}
 ml = None
 project_id = None
+is_gpu = False
 
 
 
@@ -76,8 +77,6 @@ class RateCounter(object):
 
 successes = RateCounter(1 * 60 * 1e6)
 failures = RateCounter(1 * 60 * 1e6)
-cloud_requests = RateCounter(5 * 60 * 1e6)
-cloud_accepts = RateCounter(5 * 60 * 1e6)
 
 
 # Get the models as a json string.
@@ -100,9 +99,13 @@ def get_Status():
     return
 
 
+def process_Image():
+    # Get the time the process starts
+    start = time.time()
+
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
-        if self.path == "/health":
+        if self.path == "/status":
             self.send_response(200)
             self.end_headers()
             self.wfile.write("OK")
@@ -188,6 +191,7 @@ class Handler(BaseHTTPRequestHandler):
 
             output_b64data = None
 
+            # Try to queue the image to be processed.
             if output_b64data is None and "local" in variants and jobs.acquire(blocking=False):
                 m = variants["local"]
                 try:
@@ -232,6 +236,9 @@ def main():
 
     if a.local_models_dir is not None:
         import tensorflow as tf
+        if tf.test.is_built_with_cuda():
+            is_gpu = True
+
         for name in os.listdir(a.local_models_dir):
             if name.startswith("."):
                 continue

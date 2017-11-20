@@ -1,0 +1,21 @@
+// An example object for storing details about a neural network we will be serving.
+
+[
+  {"name": "A Pix2Pix Neural Network",
+    "models": [
+      {
+        "name": "My first Model",
+        "desc": "The first model that we trained.",
+        "uses": 10
+      },
+      {
+        "name": "My second Model",
+        "desc": "The second model that we trained.",
+        "uses": 15
+      }],
+    "images_processed":25,
+    "uptime": 6403,
+    "description": "This is the first one.",
+    "production": false
+  }
+]
