@@ -45,6 +45,7 @@ def main():
               "Python version 3.5 or 3.6.")
 
     try:
+        # TODO: Replace imp for python 3.6
         _, pathname, _ = imp.find_module("tensorflow")
         print("\n- TensorFlow is installed at: %s" % pathname)
     except ImportError:
