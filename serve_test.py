@@ -1,7 +1,3 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import socket
 import time
 import argparse
@@ -27,7 +23,7 @@ else:
 socket.setdefaulttimeout(30)
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--local_models_dir", help="directory containing local models to serve (either this or --cloud_model_names must be specified)")
+parser.add_argument("--config_dir", help="directory containing the configuration json")
 parser.add_argument("--origin", help="allowed origin")
 parser.add_argument("--addr", default="", help="address to listen on")
 parser.add_argument("--port", default=8000, type=int, help="port to listen on")
@@ -78,6 +74,19 @@ class RateCounter(object):
 successes = RateCounter(1 * 60 * 1e6)
 failures = RateCounter(1 * 60 * 1e6)
 
+class Status(object):
+    def __init__(self, status, message):
+        self.status = status
+        self.message = message
+
+    def toDict(self):
+        temp = {}
+        temp['message'] = self.message
+        temp['status'] = self.status
+        return temp
+
+
+OK = Status("Ok", "All systems are go.")
 
 # Get the models as a json string.
 def getModels(inputDir):
@@ -174,8 +183,9 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/status":
             self.send_response(200)
+            self.send_header("Content-type", "text/json")
             self.end_headers()
-            self.wfile.write("OK")
+            self.wfile.write(json.JSONEncoder().encode(OK.toDict()).encode("utf-8"))
             return
 
         if self.path == "/models":
@@ -244,36 +254,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             name = self.path[1:]
             print(name)
-            if name not in models:
-                raise Exception("invalid model")
 
-            content_len = int(self.headers.get("content-length", "0"))
-            if content_len > 1 * 1024 * 1024:
-                raise Exception("post body too large")
-            input_data = self.rfile.read(content_len)
-            input_b64data = base64.urlsafe_b64encode(input_data)
-
-            output_b64data = None
-
-            # Try to queue the image to be processed.
-            if output_b64data is None and jobs.acquire(blocking=False):
-
-                try:
-                    output_b64data = models[name]["sess"].run(models[name]["output"], feed_dict={models[name]["input"]: [input_b64data]})[0]
-                finally:
-                    jobs.release()
-
-            if output_b64data is None:
-                raise Exception("too many requests")
-
-            output_b64data += b"=" * (-len(output_b64data) % 4)
-
-            output_data = base64.urlsafe_b64decode(output_b64data)
-
-            headers["content-type"] = "image/png"
-
-            body = output_data
-            successes.incr()
 
         except Exception as e:
             failures.incr()
@@ -297,6 +278,9 @@ class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
 def main():
     if a.local_models_dir is None:
         raise Exception("must specify --local_models_dir")
+
+    # Load Config from file.
+
 
     if a.local_models_dir is not None:
         import tensorflow as tf
