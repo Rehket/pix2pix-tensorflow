@@ -8,6 +8,9 @@ import traceback
 import threading
 import multiprocessing
 import sys
+from flask import Flask
+
+app = Flask(__name__)
 
 # https://github.com/Nakiami/MultithreadedSimpleHTTPServer/blob/master/MultithreadedSimpleHTTPServer.py
 if sys.version_info.major == 3:
@@ -170,12 +173,13 @@ class Model(object):
                 # Add padding
                 result += b"=" * (-len(result) % 4)
 
-                # Decode the base 64 result
-                output_result = base64.urlsafe_b64decode(result)
+                self.uses = self.uses + 1
 
-                return output_result
+                # Decode the base 64 result
+                return base64.urlsafe_b64decode(result)
 
             else:  # If we were not able to get a semaphore to process the job.
+                network_model.add_failure()
                 print("Too many requests.")
                 return None
 
@@ -246,6 +250,14 @@ class Network(object):
         print(self.models)
         return self.models[_model].run_session(_input)
 
+    def add_successes(self):
+        self.successful_uses = self.successful_uses + 1
+        self.uses = self.uses + 1
+
+    def add_failure(self):
+        self.failed_uses = self.failed_uses + 1
+        self.uses = self.uses + 1
+
 
 class Handler(BaseHTTPRequestHandler):
 
@@ -287,7 +299,7 @@ class Handler(BaseHTTPRequestHandler):
             body = output_data
 
         except Exception as e:
-            failures.incr()
+            failures.incr()  # TODO: Switch to network failure counter.
             print("Exception", traceback.format_exc())
             status = 500
             body = "Server error".encode('utf-8')
@@ -315,6 +327,14 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-type", "text/json")
             self.end_headers()
             self.wfile.write(getModels("C:\Workspace\pix2pix-tensorflow\Models").encode("utf-8"))
+
+            return
+
+        if self.path == "/network":
+            self.send_response(200)
+            self.send_header("Content-type", "text/json")
+            self.end_headers()
+            self.wfile.write(json.JSONEncoder().encode(network_model.toDict()).encode("utf-8"))
 
             return
 
@@ -382,7 +402,8 @@ if __name__ == "__main__":
 
         # For every model in the models directory, load the model and get it ready to process images.
 
-    print("listening on %s:%s" % (a.addr, a.port))
-    ThreadedHTTPServer((a.addr, a.port), Handler).serve_forever()
+    #print("listening on %s:%s" % (a.addr, a.port))
+    # ThreadedHTTPServer((a.addr, a.port), Handler).serve_forever()
+    app.run(host='127.0.0.1', port=8000)
 
 
