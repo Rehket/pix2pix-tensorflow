@@ -1,34 +1,35 @@
 [
   {"name": "SketchFoo Pix2Pix",
+    "model_directory": "C:/Workspace/pix2pix-tensorflow/Models",
     "models": [
       {
         "name": "CUHK Faces, Sketch to Face",
         "target": "CUHK_Faces",
-        "desc": "The First Model we trained. It as trained on the Chinese University of Hong Kong's Student Face Sketch dataset.",
+        "description": "The First Model we trained. It as trained on the Chinese University of Hong Kong's Student Face Sketch dataset.",
         "uses": 0
       },
       {
         "name": "FERET Dataset 1, Sketch to face",
         "target": "Feret_Dataset_1",
-        "desc": "The second model that we trained. This model was trained on the FERET color face dataset. We used face detection and some common face ratios to build bounding boxes around faces.",
+        "description": "The second model that we trained. This model was trained on the FERET color face dataset. We used face detection and some common face ratios to build bounding boxes around faces.",
         "uses": 0
       },
       {
         "name": "FERET Dataset 2, Sketch to face",
         "target": "Feret_Dataset_2",
-        "desc": "The second model that we trained. This model was trained on the FERET color face dataset. We used face detection and some common face ratios to build bounding boxes around faces. Additionally, color normalization was introduced to make the faces appear with more depth.",
+        "description": "The second model that we trained. This model was trained on the FERET color face dataset. We used face detection and some common face ratios to build bounding boxes around faces. Additionally, color normalization was introduced to make the faces appear with more depth.",
         "uses": 0
       },
       {
         "name": "FERET Face to Sketch",
         "target": "Feret_Dataset_2_Face2Sketch",
-        "desc": "This model was trained on the FERET color face dataset. This Model translates faces to sketches.",
+        "description": "This model was trained on the FERET color face dataset. This Model translates faces to sketches.",
         "uses": 0
       },
       {
         "name": "FERET 2 RLR",
         "target": "Feret_Dataset_2_RLR",
-        "desc": "This model was trained on the FERET color face dataset with a reduced learning rate. The goal when reducing the learning rate was to make the loss graph smoother. The generator graph did get smoother however, the discriminator graph got noisier.",
+        "description": "This model was trained on the FERET color face dataset with a reduced learning rate. The goal when reducing the learning rate was to make the loss graph smoother. The generator graph did get smoother however, the discriminator graph got noisier.",
         "uses": 0
       }],
     "images_processed":0,

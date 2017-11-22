@@ -235,11 +235,11 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         start = time.time()
 
-        status = 200
+        status = 201
         headers = {}
         if "origin" in self.headers:
             headers = {"access-control-allow-origin": self.headers["origin"]}
-        body = ""
+
 
         try:
             name = self.path[1:]
@@ -273,6 +273,7 @@ class Handler(BaseHTTPRequestHandler):
             headers["content-type"] = "image/png"
 
             body = output_data
+            print(output_data)
             successes.incr()
 
         except Exception as e:
