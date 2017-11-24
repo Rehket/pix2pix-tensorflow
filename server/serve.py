@@ -242,7 +242,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
         try:
-            name = self.path[1:]
+            name = self.path[2:]
             print(name)
             if name not in models:
                 raise Exception("invalid model")
@@ -280,7 +280,7 @@ class Handler(BaseHTTPRequestHandler):
             failures.incr()
             print("exception", traceback.format_exc())
             status = 500
-            body = "server error"
+            body = "server error".encode('utf-8')
 
         self.send_response(status)
         for key, value in headers.items():

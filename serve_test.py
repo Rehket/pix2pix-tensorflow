@@ -113,6 +113,20 @@ def get_Status():
 
 # Model Class Object. The Model contains all the variables associated with a model.
 class Model(object):
+    """ A model used in tensorflow to translate images.
+    Attributes:
+        name:
+        description:
+        uses:
+        target:
+        session:
+        graph:
+        saver:
+        input_vars:
+        output_vars:
+        input:
+        output:
+    """
 
     def __init__(self, _name, _description, _uses, _target):
         self.name = _name
@@ -182,19 +196,33 @@ class Model(object):
 
 # A class to hold the information pertaining to the neural network. It makes for easy parsing into json.
 class Network(object):
-    name = None  # The name of the nueral network. Does not really do anything.
-    models = {}  # The models contained in this neural network. The key for each network is it's target.
-    images_processed = 0  # Whenever an image is processed, the counter increments.
-    description = None  # The description of the Neural Network
-    production = False  # Production or testing network.
-    start_time = 0  # The start time for the network
-    total_time = 0  # The total uptime for the network.
-    is_gpu = False  # Are we using GPU processing for the network.
-    successful_uses = 0  # How many images have been successfully translated.
-    failed_uses = 0  # How many uses were unsuccessfully translated.
-    uses = 0  # What is the total number of uses.
+    """
+    name: The name of the nueral network. Does not really do anything.
+    models: The models contained in this neural network. The key for each network is it's target.
+    images_processed: Whenever an image is processed, the counter increments.
+    description: The description of the Neural Network
+    production: Production or testing network.
+    start_time: The start time for the network
+    total_time: The total uptime for the network.
+    is_gpu: Are we using GPU processing for the network.
+    successful_uses: How many images have been successfully translated.
+    failed_uses: How many uses were unsuccessfully translated.
+    total_uses: What is the total number of uses.
+    """
+    name = None
+    models = {}
+    images_processed = 0
+    description = None
+    production = False
+    start_time = 0
+    total_time = 0
+    is_gpu = False
+    successful_uses = 0
+    failed_uses = 0
+    total_uses = 0
+    origin = "*"
 
-    def __init__(self, _name, _description, _model_dir):
+    def __init__(self, _name, _description, _model_dir, _origin):
         self.name = _name
         self.description = _description
         self.start_time = time.time()
@@ -215,41 +243,39 @@ class Network(object):
 
     # Get a dict of the network.
     def toDict(self):
-        temp = {}
-        temp['name'] = self.name
-        temp['images_processed'] = self.images_processed
-        temp['description'] = self.description
-        temp['uptime'] = self.getUptime()
-        temp['production'] = self.production
-        temp['models'] = self.getModelsDict()
-        temp['uses'] = self.uses
-        temp['successful_uses'] = self.successful_uses
-        temp['failed_uses'] = self.failed_uses
-        return temp
+        return {'name': self.name,
+                'images_processed': self.images_processed,
+                'description': self.description,
+                'uptime': self.getUptime(),
+                'production': self.production,
+                'models': self.getModelsDict(),
+                'uses': self.total_uses,
+                'successful_uses': self.successful_uses,
+                'failed_uses': self.failed_uses}
 
     # Adds a model to the model dict in the network class.
-    def add_model(self, _model):
+    def addModel(self, _model):
         self.models[_model.name] = _model
 
     # Creates a new model from a model dict and adds it to the dict of models in the network class.
-    def create_model(self, _model):
+    def createModel(self, _model):
         self.models[_model['target']] = Model(_model['name'],
                                             _model['description'],
                                             _model['uses'],
                                             _model['target'])
 
-    def init_models(self):
+    def initModels(self):
         for value in self.models:
             self.models[value].init_TF_Grapg(self.model_dir)
 
-    def process_image(self, _model, _input):
+    def processImage(self, _model, _input):
         print(self.models)
         return self.models[_model].run_session(_input)
 
 
 class Handler(BaseHTTPRequestHandler):
 
-    def API_Post(self, urls):
+    def APIPost(self, urls):
         if urls[0] == "image":
             self.process_image(urls[1])
 
@@ -280,7 +306,7 @@ class Handler(BaseHTTPRequestHandler):
 
             input_data = self.rfile.read(content_len)
 
-            output_data = network_model.process_image(target_model, input_data)
+            output_data = network_model.processImage(target_model, input_data)
 
             headers["content-type"] = "image/png"
 
@@ -298,9 +324,6 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-        print(
-            "finished in %0.1fs successes=%d failures=%d" % (time.time() - start, successes.value(), failures.value()))
-
     def do_GET(self):
 
         if self.path == "/status":
@@ -315,7 +338,6 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-type", "text/json")
             self.end_headers()
             self.wfile.write(getModels("C:\Workspace\pix2pix-tensorflow\Models").encode("utf-8"))
-
             return
 
         self.send_response(404)
@@ -325,7 +347,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
         self.send_response(200)
         if "origin" in self.headers:
-            if a.origin is not None and self.headers["origin"] != a.origin:
+            if self.headers["origin"] != a.origin:
                 print("invalid origin %s" % self.headers["origin"])
                 self.send_response(400)
                 return
@@ -343,7 +365,7 @@ class Handler(BaseHTTPRequestHandler):
         print(_path)
 
         if _path[1] == "api":
-            self.API_Post(_path[2:])
+            self.APIPost(_path[2:])
 
 
 
@@ -364,7 +386,8 @@ if __name__ == "__main__":
 
     network_model = Network(model_config['name'],
                             model_config['description'],
-                            model_config['model_directory'])
+                            model_config['model_directory'],
+                            model_config['origin'])
 
     print(network_model.name)
     print(network_model.description)
@@ -376,9 +399,10 @@ if __name__ == "__main__":
             network_model.is_gpu = True
 
         for model in model_config['models']:
-            network_model.create_model(model)
+            network_model.createModel(model)
 
-        network_model.init_models()
+        if model_config['build_models']:
+            network_model.initModels()
 
         # For every model in the models directory, load the model and get it ready to process images.
 

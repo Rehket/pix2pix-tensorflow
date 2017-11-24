@@ -36,6 +36,8 @@
     "uptime": 0,
     "description": "This is the first one.",
     "production": false,
-    "is_GPU:" : true
+    "is_GPU:" : true,
+    "origin": "*",
+    "build_models": false
   }
 ]
